@@ -29,13 +29,28 @@ abstract class QuickCheckHeap extends Properties("Heap") with IntHeap {
     isEmpty(h)
   }
   
-  /*property("sorted") = forAll { (h : H) =>
-    
-  }*/
+  property("sorted") = forAll { (h : H) =>
+  	valuesSorted(Int.MinValue, h)
+  }
+  
+  property("minMelded") = forAll { (h1 : H, h2 : H) =>
+  	val x1 = findMin(h1)
+  	val x2 = findMin(h2)
+  	val xm = findMin(meld(h1, h2))
+  	if (x1 <= x2) xm == x1 else xm == x2
+  }
+  
+  def valuesSorted(x: Int, h: H): Boolean = isEmpty(h) match {
+  	case true => true
+    case false =>
+      val y = findMin(h)
+      if (x <= y) valuesSorted(y, deleteMin(h)) 
+      else false
+  }
 
   lazy val genHeap: Gen[H] = for {
     v <- arbitrary[Int]
-    h <- oneOf(empty, genHeap)
+    h <- oneOf(value(empty), genHeap)
   } yield insert(v, h)
 
   implicit lazy val arbHeap: Arbitrary[H] = Arbitrary(genHeap)
