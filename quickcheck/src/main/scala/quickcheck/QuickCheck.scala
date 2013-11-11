@@ -30,7 +30,7 @@ abstract class QuickCheckHeap extends Properties("Heap") with IntHeap {
   }
   
   property("sorted") = forAll { (h : H) =>
-  	valuesSorted(Int.MinValue, h)
+  	areValuesSorted(Int.MinValue, h)
   }
   
   property("minMelded") = forAll { (h1 : H, h2 : H) =>
@@ -41,7 +41,7 @@ abstract class QuickCheckHeap extends Properties("Heap") with IntHeap {
   }
   
   property("sortedMelded") = forAll { (h1 : H, h2 : H) =>
-  	valuesSorted(Int.MinValue, meld(h1, h2))
+  	areValuesSorted(Int.MinValue, meld(h1, h2))
   }
   
   property("valuesMelded") = forAll { (h1 : H, h2 : H) =>
@@ -53,11 +53,11 @@ abstract class QuickCheckHeap extends Properties("Heap") with IntHeap {
     case false => values(deleteMin(h)) + findMin(h)
   }
   
-  def valuesSorted(x: Int, h: H): Boolean = isEmpty(h) match {
+  def areValuesSorted(x: Int, h: H): Boolean = isEmpty(h) match {
   	case true => true
     case false =>
       val y = findMin(h)
-      if (x <= y) valuesSorted(y, deleteMin(h)) 
+      if (x <= y) areValuesSorted(y, deleteMin(h)) 
       else false
   }
 
