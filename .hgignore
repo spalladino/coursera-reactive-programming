@@ -5,3 +5,4 @@ workspace
 */.worksheet
 */project/*
 */target/*
+target/*
