@@ -81,10 +81,15 @@ abstract class CircuitSimulator extends Simulator {
 	    case c :: Nil => 
 	      val notc = new Wire
 	      inverter(c, notc)
-	      andGate(notc, in, out(0))
-	      andGate(c, in, out(1))
+	      andGate(c, in, out(0))
+	      andGate(notc, in, out(1))
 	    case c :: cs =>
-	      ???
+	      val notc, dhigh, dlow = new Wire
+	      inverter(c, notc)
+	      andGate(notc, in, dlow)
+	      andGate(c, in, dhigh)
+	      demux(dlow, cs, out.drop(out.length/2))
+	      demux(dhigh, cs, out.take(out.length/2))
 	  }
   }
 

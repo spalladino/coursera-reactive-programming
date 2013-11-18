@@ -70,14 +70,16 @@ class CircuitSuite extends CircuitSimulator with FunSuite {
     
     assert(out.getSignal === true, "or 3")
   }
-
+  
   class DemuxTester(in: Wire, controls: List[Wire], out: List[Wire]) {
+    demux(in, controls, out)
+    
     def assertValues(inSignal: Boolean, controlsSignals: List[Boolean], expectedSignals: List[Boolean]) {
       in.setSignal(inSignal)
       (controls, controlsSignals).zipped.map((c,s) => c.setSignal(s))
       run
       
-      (out, expectedSignals).zipped.map((o,s) => assert(o.getSignal === s))
+      (out, expectedSignals, (out.length-1).to(0).by(-1)).zipped.map((o,s,i) => assert(o.getSignal === s, s"in $inSignal, controls $controlsSignals, output $i expected $s but was ${o.getSignal}"))
     }
   }
   
@@ -94,7 +96,7 @@ class CircuitSuite extends CircuitSimulator with FunSuite {
   
   test("demux 1 control wire example") {
     val in, c0, out0, out1 = new Wire
-    demux(in, List(c0), List(out0, out1))
+    demux(in, List(c0), List(out1, out0))
     
     in.setSignal(false); c0.setSignal(false); run
     assert(out0.getSignal === false, "demux in0=0 c0=0 => out0=0")
@@ -115,30 +117,54 @@ class CircuitSuite extends CircuitSimulator with FunSuite {
   
   test("demux 1 control wire example with tester") {
     val in, c0, out0, out1 = new Wire
-    demux(in, List(c0), List(out0, out1))
-    val tester = new DemuxTester(in, List(c0), List(out0, out1))
+    val tester = new DemuxTester(in, List(c0), List(out1, out0))
     
     tester.assertValues(false, List(false), List(false, false))
     tester.assertValues(false, List(true),  List(false, false))
-    tester.assertValues(true,  List(false), List(true, false))
-    tester.assertValues(true,  List(true),  List(false, true))
+    tester.assertValues(true,  List(false), List(false, true))
+    tester.assertValues(true,  List(true),  List(true,  false))
   }
   
   test("demux 2 control wire example with tester") {
     val in, c0, c1, out0, out1, out2, out3 = new Wire
-    demux(in, List(c0, c1), List(out0, out1, out2, out3))
-    val tester = new DemuxTester(in, List(c0, c1), List(out0, out1, out2, out3))
+    val tester = new DemuxTester(in, List(c1, c0), List(out3, out2, out1, out0))
     
     tester.assertValues(false, List(false, false), List(false, false, false, false))
     tester.assertValues(false, List(true,  false), List(false, false, false, false))
     tester.assertValues(false, List(true,  true),  List(false, false, false, false))
     tester.assertValues(false, List(false, true),  List(false, false, false, false))
     
-    // TODO: Set values appropriately
-    tester.assertValues(true, List(false, false), List(false, false, false, false))
-    tester.assertValues(true, List(true,  false), List(false, false, false, false))
-    tester.assertValues(true, List(true,  true),  List(false, false, false, false))
-    tester.assertValues(true, List(false, true),  List(false, false, false, false))
+    tester.assertValues(true, List(false, false), List(false, false, false, true))
+    tester.assertValues(true, List(false, true),  List(false, false, true, false))
+    tester.assertValues(true, List(true,  false), List(false, true, false, false))
+    tester.assertValues(true, List(true,  true),  List(true, false, false, false))
+  }
+  
+  // Feedback on how to write DRYer tests is most welcome!
+  test("demux 3 control wire example with tester") {
+    val in, c0, c1, c2, out0, out1, out2, out3, out4, out5, out6, out7 = new Wire
+    val tester = new DemuxTester(in, List(c2, c1, c0), List(out7, out6, out5, out4, out3, out2, out1, out0))
+    
+    tester.assertValues(false, List(false, false, false), List(false, false, false, false, false, false, false, false))
+    tester.assertValues(false, List(false, true,  false), List(false, false, false, false, false, false, false, false))
+    tester.assertValues(false, List(false, true,  true),  List(false, false, false, false, false, false, false, false))
+    tester.assertValues(false, List(false, false, true),  List(false, false, false, false, false, false, false, false))
+    
+    tester.assertValues(false, List(true, false, false), List(false, false, false, false, false, false, false, false))
+    tester.assertValues(false, List(true, true,  false), List(false, false, false, false, false, false, false, false))
+    tester.assertValues(false, List(true, true,  true),  List(false, false, false, false, false, false, false, false))
+    tester.assertValues(false, List(true, false, true),  List(false, false, false, false, false, false, false, false))
+    
+    tester.assertValues(true, List(false, false, false), List(false, false, false, false, false, false, false, true))
+    tester.assertValues(true, List(false, false, true),  List(false, false, false, false, false, false, true, false))
+    tester.assertValues(true, List(false, true,  false), List(false, false, false, false, false, true, false, false))
+    tester.assertValues(true, List(false, true,  true),  List(false, false, false, false, true, false, false, false))
+    
+    tester.assertValues(true, List(true, false, false), List(false, false, false, true, false, false, false, false))
+    tester.assertValues(true, List(true, false, true),  List(false, false, true, false, false, false, false, false))
+    tester.assertValues(true, List(true, true,  false), List(false, true, false, false, false, false, false, false))
+    tester.assertValues(true, List(true, true,  true),  List(true, false, false, false, false, false, false, false))
+
   }
   
 
