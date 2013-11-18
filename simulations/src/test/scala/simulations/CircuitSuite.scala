@@ -124,5 +124,22 @@ class CircuitSuite extends CircuitSimulator with FunSuite {
     tester.assertValues(true,  List(true),  List(false, true))
   }
   
+  test("demux 2 control wire example with tester") {
+    val in, c0, c1, out0, out1, out2, out3 = new Wire
+    demux(in, List(c0, c1), List(out0, out1, out2, out3))
+    val tester = new DemuxTester(in, List(c0, c1), List(out0, out1, out2, out3))
+    
+    tester.assertValues(false, List(false, false), List(false, false, false, false))
+    tester.assertValues(false, List(true,  false), List(false, false, false, false))
+    tester.assertValues(false, List(true,  true),  List(false, false, false, false))
+    tester.assertValues(false, List(false, true),  List(false, false, false, false))
+    
+    // TODO: Set values appropriately
+    tester.assertValues(true, List(false, false), List(false, false, false, false))
+    tester.assertValues(true, List(true,  false), List(false, false, false, false))
+    tester.assertValues(true, List(true,  true),  List(false, false, false, false))
+    tester.assertValues(true, List(false, true),  List(false, false, false, false))
+  }
+  
 
 }
