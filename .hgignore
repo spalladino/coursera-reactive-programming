@@ -2,3 +2,6 @@ syntax: glob
 workspace
 *.class
 */.cache
+*/.worksheet
+*/project/*
+*/target/*
