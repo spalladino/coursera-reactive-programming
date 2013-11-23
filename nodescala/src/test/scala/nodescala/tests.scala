@@ -33,6 +33,88 @@ class NodeScalaSuite extends FunSuite {
       case t: TimeoutException => // ok!
     }
   }
+  
+  test("A list of Futures should be created") {
+    val fs = List(Future.always(1), Future.always(2), Future.always(3))
+    val sf = Future.all(fs)
+    assert(Await.result(sf, 1 second) == List(1,2,3))
+  }
+  
+  test("A list of Futures should not complete until all are completed") {
+    val p1,p2,p3 = promise[Int]
+    val ps = List(p1,p2,p3)
+    val fs = ps.map{_.future}
+    val sf = Future.all(fs)
+
+    p3.complete(Try(3))
+    p1.complete(Try(1))
+    
+    try {
+      Await.result(sf, 1 second)
+      assert(false)
+    } catch {
+      case t: TimeoutException => {
+        p2.complete(Try(2))
+        assert(Await.result(sf, 1 second) == List(1,2,3))
+      }
+    }
+  }
+  
+  test("A list of Futures should be created with the same order as the original list") {
+    val p1,p2,p3 = promise[Int]
+    val ps = List(p1,p2,p3)
+    val fs = ps.map{_.future}
+    val sf = Future.all(fs)
+
+    p3.complete(Try(3))
+    p2.complete(Try(2))
+    p1.complete(Try(1))
+    
+    assert(Await.result(sf, 1 second) == List(1,2,3))
+  }
+  
+  test("A list of Futures should fail if the first fails") {
+    val p1,p2,p3 = promise[Int]
+    val ps = List(p1,p2,p3)
+    val sf = Future.all(ps.map{_.future})
+
+    p1.failure(new Exception)
+    p2.complete(Try(2))
+    p3.complete(Try(3))
+    
+    assert(Await.result(sf, 1 second) == List(1,2,3))
+  }
+  
+  test("A list of Futures should fail if the last fails") {
+    val p1,p2,p3 = promise[Int]
+    val ps = List(p1,p2,p3)
+    val sf = Future.all(ps.map{_.future})
+
+    p1.complete(Try(1))
+    p2.complete(Try(2))
+    p3.failure(new Exception)
+    
+    assert(Await.result(sf, 0 nanos) == List(1,2,3))
+  }
+  
+  test("A list of Futures should not fail if the first fails until all are completed") {
+    val p1,p2,p3 = promise[Int]
+    val ps = List(p1,p2,p3)
+    val sf = Future.all(ps.map{_.future})
+
+    p1.failure(new Exception)
+    
+    try {
+      Await.result(sf, 1 second)
+      assert(false)
+    } catch {
+      case t: TimeoutException => {
+        p2.complete(Try(2))
+        p3.complete(Try(3))
+        assert(Await.result(sf, 1 second) == List(1,2,3))
+      }
+    }
+  }
 
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
