@@ -109,31 +109,64 @@ class NodeScalaSuite extends FunSuite {
     }
   }
 
-  /*test("A list of Futures should not fail if the first fails until all are completed") {
+  test("Any should return first succeeded future before the rest complete") {
     val p1, p2, p3 = promise[Int]
     val ps = List(p1, p2, p3)
-    val sf = Future.all(ps.map { _.future })
+    val anyf = Future.any(ps.map { _.future })
 
-    p1.failure(new MyTestException)
+    p1.complete(Try(1))
+    assert(Await.result(anyf, 1 second) == 1)
+  }
+
+  test("Any should return first succeeded future after the rest complete") {
+    val p1, p2, p3 = promise[Int]
+    val ps = List(p1, p2, p3)
+    val anyf = Future.any(ps.map { _.future })
+
+    p2.complete(Try(2))
+
+    p1.complete(Try(1))
+    p3.failure(new MyTestException)
+
+    assert(Await.result(anyf, 1 second) == 2)
+  }
+
+  test("Any should return first failed future before the rest complete") {
+    val p1, p2, p3 = promise[Int]
+    val ps = List(p1, p2, p3)
+    val anyf = Future.any(ps.map { _.future })
+
+    p3.failure(new MyTestException)
 
     try {
-      Await.result(sf, 1 second)
-      assert(false)
+      Await.result(anyf, 1 second)
     } catch {
-      case t: MyTestException => assert(false, "Should not raise my test exception now")
-      case t: TimeoutException => {
-        p2.complete(Try(2))
-        p3.complete(Try(3))
-        try {
-          Await.result(sf, 1 second)
-        } catch {
-          case t: MyTestException  =>
-          case t: TimeoutException => assert(false, "Future timed out")
-          case _: Throwable        => assert(false, "Unexpected exception")
-        }
-      }
+      case _: MyTestException  =>
+      case _: TimeoutException => assert(false, "Future timed out")
+      case _: Throwable        => assert(false, "Unexpected exception")
     }
-  }*/
+
+  }
+
+  test("Any should return first failed future after the rest complete") {
+    val p1, p2, p3 = promise[Int]
+    val ps = List(p1, p2, p3)
+    val anyf = Future.any(ps.map { _.future })
+
+    p3.failure(new MyTestException)
+
+    p2.complete(Try(2))
+    p1.complete(Try(1))
+
+    try {
+      Await.result(anyf, 1 second)
+    } catch {
+      case _: MyTestException  =>
+      case _: TimeoutException => assert(false, "Future timed out")
+      case _: Throwable        => assert(false, "Unexpected exception")
+    }
+
+  }
 
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
