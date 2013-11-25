@@ -165,7 +165,19 @@ class NodeScalaSuite extends FunSuite {
       case _: TimeoutException => assert(false, "Future timed out")
       case _: Throwable        => assert(false, "Unexpected exception")
     }
-
+  }
+  
+  test("Should delay for 1 second") {
+    val d = Future.delay(1 second)
+    
+    try {
+      Await.result(d, 0.6 seconds)
+      assert(false)
+    } catch {
+      case _: TimeoutException =>
+        // ok, shouldn't have finished by now, we need to wait a bit more
+        Await.result(d, 0.6 seconds) 
+    }
   }
 
   test("CancellationTokenSource should allow stopping the computation") {
