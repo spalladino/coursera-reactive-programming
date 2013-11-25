@@ -207,6 +207,65 @@ class NodeScalaSuite extends FunSuite {
       case _: Throwable       => assert(false, "Unexpected exception")
     }
   }
+  
+  test("Continue with should return value") {
+    val p = promise[Int]
+    val f = p.future.continueWith(f => f.now + 1)
+    p.success(1)
+    
+    assert(Await.result(f, 1 second) == 2)
+  }
+  
+  test("Continue with should pass failure into function") {
+    val p = promise[Int]
+    val f = p.future.continueWith { _.fallbackTo(Future.always(5)).now } 
+    
+    p.failure(new MyTestException)
+    assert(Await.result(f, 1 second) == 5)
+  }
+  
+  test("Continue with should handle failures in function") {
+    val p = promise[Int]
+    val f = p.future.continueWith { _ => throw new MyTestException } 
+    p.success(1)
+    
+    try { Await.result(f, 1 second) }
+    catch {
+      case _: MyTestException =>
+      case _: Throwable       => assert(false, "Unexpected exception")
+    }
+  }
+  
+  test("Continue should return value") {
+    val p = promise[Int]
+    val f = p.future.continue(v => v.get + 1)
+    p.success(1)
+    
+    assert(Await.result(f, 1 second) == 2)
+  }
+  
+  test("Continue should pass failure into function") {
+    val p = promise[Int]
+    val f = p.future.continue { 
+      case Failure(e) => e
+      case _ => assert(false, "Unexpected successful value")
+    }
+    
+    p.failure(new MyTestException)
+    assert(Await.result(f, 1 second).isInstanceOf[MyTestException])
+  }
+  
+  test("Continue should handle failures in function") {
+    val p = promise[Int]
+    val f = p.future.continue { _ => throw new MyTestException } 
+    p.success(1)
+    
+    try { Await.result(f, 1 second) }
+    catch {
+      case _: MyTestException =>
+      case _: Throwable       => assert(false, "Unexpected exception")
+    }
+  }
 
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
