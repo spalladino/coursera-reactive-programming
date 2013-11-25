@@ -1,14 +1,12 @@
 package nodescala
 
-
-
 import scala.language.postfixOps
-import scala.util.{Try, Success, Failure}
+import scala.util.{ Try, Success, Failure }
 import scala.collection._
 import scala.concurrent._
 import ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.async.Async.{async, await}
+import scala.async.Async.{ async, await }
 import org.scalatest._
 import NodeScala._
 import org.junit.runner.RunWith
@@ -16,6 +14,8 @@ import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
 class NodeScalaSuite extends FunSuite {
+
+  class MyTestException extends Exception
 
   test("A Future should always be created") {
     val always = Future.always(517)
@@ -33,88 +33,107 @@ class NodeScalaSuite extends FunSuite {
       case t: TimeoutException => // ok!
     }
   }
-  
+
   test("A list of Futures should be created") {
     val fs = List(Future.always(1), Future.always(2), Future.always(3))
     val sf = Future.all(fs)
-    assert(Await.result(sf, 1 second) == List(1,2,3))
+    assert(Await.result(sf, 1 second) == List(1, 2, 3))
   }
-  
+
   test("A list of Futures should not complete until all are completed") {
-    val p1,p2,p3 = promise[Int]
-    val ps = List(p1,p2,p3)
-    val fs = ps.map{_.future}
+    val p1, p2, p3 = promise[Int]
+    val ps = List(p1, p2, p3)
+    val fs = ps.map { _.future }
     val sf = Future.all(fs)
 
     p3.complete(Try(3))
     p1.complete(Try(1))
-    
+
     try {
       Await.result(sf, 1 second)
       assert(false)
     } catch {
       case t: TimeoutException => {
         p2.complete(Try(2))
-        assert(Await.result(sf, 1 second) == List(1,2,3))
+        assert(Await.result(sf, 1 second) == List(1, 2, 3))
       }
     }
   }
-  
+
   test("A list of Futures should be created with the same order as the original list") {
-    val p1,p2,p3 = promise[Int]
-    val ps = List(p1,p2,p3)
-    val fs = ps.map{_.future}
+    val p1, p2, p3 = promise[Int]
+    val ps = List(p1, p2, p3)
+    val fs = ps.map { _.future }
     val sf = Future.all(fs)
 
     p3.complete(Try(3))
     p2.complete(Try(2))
     p1.complete(Try(1))
-    
-    assert(Await.result(sf, 1 second) == List(1,2,3))
-  }
-  
-  test("A list of Futures should fail if the first fails") {
-    val p1,p2,p3 = promise[Int]
-    val ps = List(p1,p2,p3)
-    val sf = Future.all(ps.map{_.future})
 
-    p1.failure(new Exception)
+    assert(Await.result(sf, 1 second) == List(1, 2, 3))
+  }
+
+  test("A list of Futures should fail if the first fails") {
+    val p1, p2, p3 = promise[Int]
+    val ps = List(p1, p2, p3)
+    val sf = Future.all(ps.map { _.future })
+
+    p1.failure(new MyTestException)
     p2.complete(Try(2))
     p3.complete(Try(3))
-    
-    assert(Await.result(sf, 1 second) == List(1,2,3))
+
+    try {
+      Await.result(sf, 1 second)
+    } catch {
+      case t: MyTestException  =>
+      case t: TimeoutException => assert(false, "Future timed out")
+      case _: Throwable        => assert(false, "Unexpected exception")
+    }
   }
-  
+
   test("A list of Futures should fail if the last fails") {
-    val p1,p2,p3 = promise[Int]
-    val ps = List(p1,p2,p3)
-    val sf = Future.all(ps.map{_.future})
+    val p1, p2, p3 = promise[Int]
+    val ps = List(p1, p2, p3)
+    val sf = Future.all(ps.map { _.future })
 
     p1.complete(Try(1))
     p2.complete(Try(2))
-    p3.failure(new Exception)
-    
-    assert(Await.result(sf, 0 nanos) == List(1,2,3))
-  }
-  
-  test("A list of Futures should not fail if the first fails until all are completed") {
-    val p1,p2,p3 = promise[Int]
-    val ps = List(p1,p2,p3)
-    val sf = Future.all(ps.map{_.future})
+    p3.failure(new MyTestException)
 
-    p1.failure(new Exception)
-    
+    try {
+      Await.result(sf, 1 second)
+    } catch {
+      case t: MyTestException  =>
+      case t: TimeoutException => assert(false, "Future timed out")
+      case _: Throwable        => assert(false, "Unexpected exception")
+    }
+  }
+
+  /*test("A list of Futures should not fail if the first fails until all are completed") {
+    val p1, p2, p3 = promise[Int]
+    val ps = List(p1, p2, p3)
+    val sf = Future.all(ps.map { _.future })
+
+    p1.failure(new MyTestException)
+
     try {
       Await.result(sf, 1 second)
       assert(false)
     } catch {
+      case t: MyTestException => assert(false, "Should not raise my test exception now")
       case t: TimeoutException => {
         p2.complete(Try(2))
         p3.complete(Try(3))
-        assert(Await.result(sf, 1 second) == List(1,2,3))
+        try {
+          Await.result(sf, 1 second)
+        } catch {
+          case t: MyTestException  =>
+          case t: TimeoutException => assert(false, "Future timed out")
+          case _: Throwable        => assert(false, "Unexpected exception")
+        }
       }
     }
-  }
+  }*/
 
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
