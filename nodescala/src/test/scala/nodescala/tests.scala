@@ -166,17 +166,45 @@ class NodeScalaSuite extends FunSuite {
       case _: Throwable        => assert(false, "Unexpected exception")
     }
   }
-  
-  test("Should delay for 1 second") {
+
+  test("Delay should wait for 1 second") {
     val d = Future.delay(1 second)
-    
+
     try {
       Await.result(d, 0.6 seconds)
       assert(false)
     } catch {
       case _: TimeoutException =>
         // ok, shouldn't have finished by now, we need to wait a bit more
-        Await.result(d, 0.6 seconds) 
+        Await.result(d, 0.6 seconds)
+    }
+  }
+
+  test("Now should return value") {
+    val p = promise[Int]
+    p.success(1)
+
+    assert(p.future.now == 1)
+  }
+
+  test("Now should return timeout if not completed") {
+    val p = promise[Int]
+
+    try { p.future.now }
+    catch {
+      case _: NoSuchElementException =>
+      case _: Throwable              => assert(false, "Unexpected exception")
+    }
+  }
+
+  test("Now should return exception if future failed") {
+    val p = promise[Int]
+    p.failure(new MyTestException)
+
+    try { p.future.now }
+    catch {
+      case _: MyTestException =>
+      case _: Throwable       => assert(false, "Unexpected exception")
     }
   }
 
