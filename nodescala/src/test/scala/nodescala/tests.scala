@@ -11,6 +11,7 @@ import org.scalatest._
 import NodeScala._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import scala.collection.mutable.ListBuffer
 
 @RunWith(classOf[JUnitRunner])
 class NodeScalaSuite extends FunSuite {
@@ -179,6 +180,19 @@ class NodeScalaSuite extends FunSuite {
         Await.result(d, 0.6 seconds)
     }
   }
+  
+   test("Delay should wait for 1 second and fire onComplete handler") {
+    val d = Future.delay(1 second)
+    var witness = false
+    
+    d.onComplete { _ => witness = true}
+    assert(!witness)
+    
+    Await.result(d, 1.2 seconds)
+    Thread.sleep(100)
+    
+    assert(witness, "Witness should have been modified on onComplete handler")
+  }
 
   test("Now should return value") {
     val p = promise[Int]
@@ -267,6 +281,26 @@ class NodeScalaSuite extends FunSuite {
     }
   }
 
+  test("Combine delay with continue") {
+    var witness = false
+    val f = Future.delay(1 second).continue(_ => witness = true)
+    assert(witness == false, "Var change should have been delayed")
+    
+    Await.result(f, 1.5 second)
+    assert(witness == true, "Var should have been changed after 1 second")
+  }
+  
+  test("Combine delay with continue and handler") {
+    var witness = false
+    val f = Future.delay(1 second).continue(_ => true)
+    f.onSuccess { case v => witness = v }
+    assert(witness == false, "Var change should have been delayed")
+    
+    Await.result(f, 1.2 second)
+    Thread.sleep(100)
+    assert(witness == true, "Var should have been changed after 1 second")
+  }
+  
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
     val ct = cts.cancellationToken
