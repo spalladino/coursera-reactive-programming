@@ -6,3 +6,4 @@ workspace
 */project/*
 */target/*
 target/*
+**.orig
