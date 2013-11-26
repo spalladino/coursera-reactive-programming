@@ -3,7 +3,6 @@ workspace
 *.class
 */.cache
 */.worksheet
-*/project/*
 */target/*
 target/*
 **.orig
