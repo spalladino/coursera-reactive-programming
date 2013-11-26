@@ -9,7 +9,7 @@ import scala.async.Async.{ async, await }
 object Main {
 
   def timeOutAfter(d: Duration): Future[String] = {
-    Future.delay(20 seconds).continue(_ => "Server timeout!")
+    Future.delay(d).continue(_ => "Server timeout!")
   }
 
   def main(args: Array[String]) {
