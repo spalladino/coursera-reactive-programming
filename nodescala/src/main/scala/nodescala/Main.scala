@@ -8,11 +8,12 @@ import scala.async.Async.{ async, await }
 
 object Main {
 
-  def timeOutAfter(d: Duration): Future[String] = {
-    Future.delay(d).continue(_ => "Server timeout!")
-  }
-
   def main(args: Array[String]) {
+
+    def timeOutAfter(d: Duration): Future[String] = {
+      Future.delay(d).continue(_ => "Server timeout!")
+    }
+
     // TO IMPLEMENT
     // 1. instantiate the server at 8191, relative path "/test",
     //    and have the response return headers of the request

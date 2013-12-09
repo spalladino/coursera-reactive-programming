@@ -1,5 +1,6 @@
 package nodescala
 
+import scala.language.postfixOps
 import com.sun.net.httpserver._
 import scala.concurrent._
 import scala.concurrent.duration._
