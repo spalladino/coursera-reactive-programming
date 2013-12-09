@@ -35,7 +35,7 @@ object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi wit
     minimumSize = new Dimension(900, 600)
 
     val button = new Button("Get") {
-      icon = new javax.swing.ImageIcon(javax.imageio.ImageIO.read(this.getClass.getResourceAsStream("/suggestions/wiki-icon.png")))
+      //icon = new javax.swing.ImageIcon(javax.imageio.ImageIO.read(this.getClass.getResourceAsStream("/suggestions/wiki-icon.png")))
     }
     val searchTermField = new TextField
     val suggestionList = new ListView(ListBuffer[String]())
@@ -81,52 +81,59 @@ object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi wit
      */
 
     // TO IMPLEMENT
-    val searchTerms: Observable[String] = ???
+    val searchTerms: Observable[String] = searchTermField.textValues.sanitized
 
     // TO IMPLEMENT
-    val suggestions: Observable[Try[List[String]]] = ???
-
+    val suggestions: Observable[Try[List[String]]] = searchTerms.concatRecovered { t: String => ObservableEx(wikipediaSuggestion(t)).timedOut(20) }
 
     // TO IMPLEMENT
-    val suggestionSubscription: Subscription =  suggestions.observeOn(eventScheduler) subscribe {
-      x => ???
+    val suggestionSubscription: Subscription = suggestions.observeOn(eventScheduler).subscribe { t: Try[List[String]] =>
+      t match {
+        case Success(sgs) => suggestionList.listData = sgs
+        case Failure(err) => status.text = err.getMessage()
+      }
     }
 
     // TO IMPLEMENT
-    val selections: Observable[String] = ???
+    val selections: Observable[String] = button.clicks
+      .map { _ => suggestionList.selection.items }
+      .filter { _.size > 0 }
+      .map { _(0) }
+      .sanitized
 
     // TO IMPLEMENT
-    val pages: Observable[Try[String]] = ???
+    val pages: Observable[Try[String]] = selections.concatRecovered { t: String => ObservableEx(wikipediaPage(t)).timedOut(20) }
 
     // TO IMPLEMENT
-    val pageSubscription: Subscription = pages.observeOn(eventScheduler) subscribe {
-      x => ???
+    val pageSubscription: Subscription = pages.observeOn(eventScheduler) subscribe { x: Try[String] =>
+      x match {
+        case Success(page) => editorpane.text = page
+        case Failure(err)  => status.text = err.getMessage()
+      }
     }
 
   }
 
 }
-
 
 trait ConcreteWikipediaApi extends WikipediaApi {
   def wikipediaSuggestion(term: String) = Search.wikipediaSuggestion(term)
   def wikipediaPage(term: String) = Search.wikipediaPage(term)
 }
 
-
 trait ConcreteSwingApi extends SwingApi {
   type ValueChanged = scala.swing.event.ValueChanged
   object ValueChanged {
     def unapply(x: Event) = x match {
       case vc: ValueChanged => Some(vc.source.asInstanceOf[TextField])
-      case _ => None
+      case _                => None
     }
   }
   type ButtonClicked = scala.swing.event.ButtonClicked
   object ButtonClicked {
     def unapply(x: Event) = x match {
       case bc: ButtonClicked => Some(bc.source.asInstanceOf[Button])
-      case _ => None
+      case _                 => None
     }
   }
   type TextField = scala.swing.TextField
