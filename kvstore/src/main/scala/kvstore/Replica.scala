@@ -34,41 +34,96 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   import Replica._
   import Replicator._
   import Persistence._
+  import Persistor._
   import context.dispatcher
-  
+
   var kv = Map.empty[String, String]
+  var reqs = Map.empty[Long, ActorRef]
   // a map from secondary replicas to replicators
   var secondaries = Map.empty[ActorRef, ActorRef]
   // the current set of replicators
   var replicators = Set.empty[ActorRef]
 
-  override def preStart() : Unit = {
-    arbiter ! Join
-  }
-  
+  override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) { case _ => Restart }
+
+  val persistence = context.actorOf(persistenceProps)
+
+  arbiter ! Join
+
   def receive = {
-    case JoinedPrimary   => context.become(leader)
-    case JoinedSecondary => context.become(replica)
+    case JoinedPrimary => context.become(leader)
+    case JoinedSecondary => context.become(replica())
   }
+
+  def get(key: String, id: Long) {
+    sender ! GetResult(key, kv.get(key), id)
+  }
+
+  def persist(key: String, valueOption: Option[String], id: Long) {
+    reqs += ((id, sender))
+    context.actorOf(Persistor.props(persistence, Persist(key, valueOption, id)))
+  }
+
+  // Leader behaviour
 
   val leader: Receive = {
-    case Insert(key, value, id) => {
-      kv = kv.+((key, value))
-      sender ! OperationAck(id)
-    }
-    case Remove(key, id) => {
-      kv = kv.-(key)
-      sender ! OperationAck(id)
-    }
-    case Get(key, id) => {
-      sender ! GetResult(key, kv.get(key), id)
-    }
+    case Get(key, id) => get(key, id)
+  	case Insert(key, value, id) => leaderInsert(key, value, id)
+    case Remove(key, id) => leaderRemove(key, id)
+    case Persisted(key, id) => leaderPersisted(key, id)
+    case PersistFailed(Persist(key, _, id)) => leaderPersistFailed(key, id)
+    case _ => throw new Exception("Unkown message")
   }
 
-  /* TODO Behavior for the replica role. */
-  val replica: Receive = {
-    case _ =>
+  def leaderInsert(key: String, value: String, id: Long) {
+    kv = kv.+((key, value))
+    persist(key, Some(value), id)
+  }
+
+  def leaderRemove(key: String, id: Long) {
+    kv = kv.-(key)
+    persist(key, None, id)
   }
   
+  def leaderPersisted(key: String, id: Long) {
+    reqs.get(id).get ! OperationAck(id)
+    reqs -= (id)
+  }
+  
+  def leaderPersistFailed(key: String, id: Long) {
+    reqs.get(id).get ! OperationFailed(id)
+    reqs -= (id)
+  }
+
+  // Replica behaviour
+
+  def replica(expectedSeq: Long = 0): Receive = {
+    case Get(key, id) => get(key, id)
+    case Snapshot(key, value, seq) if seq == expectedSeq => storeSnapshot(key, value, seq)
+    case Snapshot(key, value, seq) if seq < expectedSeq => sender ! SnapshotAck(key, seq)
+    case Snapshot(key, value, _) =>
+    case Persisted(key, id) => replicaPersisted(key, id)
+    case PersistFailed(Persist(key, _, id)) => replicaPersistFailed(key, id)
+    case _ => throw new Exception("Unkown message")
+  }
+
+  def storeSnapshot(key: String, valueOption: Option[String], seq: Long) {
+    valueOption match {
+      case Some(value) => kv += ((key, value))
+      case None => kv -= (key)
+    }
+    
+    persist(key, valueOption, seq)
+    context.become(replica(seq + 1))
+  }
+  
+  def replicaPersisted(key: String, id: Long) {
+    reqs.get(id).get ! SnapshotAck(key, id)
+    reqs -= (id)
+  }
+  
+  def replicaPersistFailed(key: String, id: Long) {
+    reqs -= (id)
+  }
 
 }
