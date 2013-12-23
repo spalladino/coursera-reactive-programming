@@ -9,15 +9,15 @@ import scala.concurrent.duration._
 import akka.actor.ReceiveTimeout
 import akka.actor.Cancellable
 
-object Persistor {
-  def props(persistence: ActorRef, operation: Persist): Props = Props(new Persistor(persistence, operation))
+object PersistAction {
+  def props(persistence: ActorRef, operation: Persist): Props = Props(new PersistAction(persistence, operation))
   
   case class PersistFailed(operation: Persist)
 }
 
-class Persistor(persistence: ActorRef, operation: Persist) extends Actor {
+class PersistAction(persistence: ActorRef, operation: Persist) extends Actor {
   import context.dispatcher
-  import Persistor._
+  import PersistAction._
   
   context.setReceiveTimeout(1 second)
 
