@@ -8,10 +8,10 @@ import scala.annotation.tailrec
 import akka.pattern.{ ask, pipe }
 import akka.actor.Terminated
 import scala.concurrent.duration._
-import akka.actor.PoisonPill
 import akka.actor.OneForOneStrategy
 import akka.actor.SupervisorStrategy
 import akka.util.Timeout
+import akka.actor.PoisonPill
 
 object Replica {
   sealed trait Operation {
@@ -43,9 +43,11 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   // a map from secondary replicas to replicators
   var secondaries = Map.empty[ActorRef, ActorRef]
   // the current set of replicators
-  var replicators = Set.empty[ActorRef]
-  // from operation id to the number of pending acks (includes local persistence)
-  var pendingAcks = Map.empty[Long, Int]
+  //var replicators = Set.empty[ActorRef]
+  // from operation id to pending acks
+  var pendingAcks = Map.empty[Long, Set[ActorRef]]
+  // from operation id to pending persistence
+  var pendingPersist = Set.empty[Long]
 
   override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) { case _ => Restart }
 
@@ -74,11 +76,11 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case Insert(key, value, id)             => leaderInsert(key, value, id)
     case Remove(key, id)                    => leaderRemove(key, id)
     case Persisted(key, id)                 => leaderPersisted(key, id)
-    case PersistFailed(Persist(key, _, id)) => leaderPersistFailed(key, id)
+    case PersistFailed(Persist(key, _, id)) => requestFailed(key, id)
     case Replicas(rs)                       => replicas(rs)
     case Replicated(key, id)                => replicateSuccess(key, id)
-    case ReplicateFailed(key, id)           => replicateFailed(key, id)
-    case _                                  => throw new Exception("Unkown message")
+    case ReplicateFailed(key, id)           => requestFailed(key, id)
+    case msg                                => throw new Exception(s"Unkown message $msg")
   }
 
   def leaderInsert(key: String, value: String, id: Long) {
@@ -92,52 +94,69 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   }
 
   def leaderPersisted(key: String, id: Long) {
-    operationSuccess(key, id)
-  }
-
-  def leaderPersistFailed(key: String, id: Long) {
-    operationFailed(key, id)
+    pendingPersist -= id
+    checkRequest(id)
   }
 
   def leaderOperation(key: String, valueOpt: Option[String], id: Long) {
     persist(key, valueOpt, id)
     replicate(key, valueOpt, id)
-    pendingAcks += ((id, replicators.size + 1))
+    pendingAcks += ((id, secondaries.values.toSet))
+    pendingPersist += id
   }
 
   def replicate(key: String, valueOpt: Option[String], id: Long) {
-    replicators.foreach(r => r ! Replicate(key, valueOpt, id))
+    secondaries.values.foreach(r => r ! Replicate(key, valueOpt, id))
   }
 
   def replicateSuccess(key: String, id: Long) {
-    operationSuccess(key, id)
-  }
-  
-  def replicateFailed(key: String, id: Long) {
-    operationFailed(key, id)
-  }
-
-  def operationSuccess(key: String, id: Long) {
-    (pendingAcks.get(id)) match {
-      case Some(1) => {
-        reqs.get(id).get ! OperationAck(id)
-        reqs -= (id)
-      }
-      case Some(remaining) => {
-        pendingAcks += ((id, remaining - 1))
-      }
-      case None =>
+    pendingAcks.get(id).foreach { acks =>
+      pendingAcks += ((id, acks - sender))
     }
+    checkRequest(id)
   }
 
-  def operationFailed(key: String, id: Long) {
+  def requestFailed(key: String, id: Long) {
     pendingAcks -= (id)
     reqs.get(id).foreach(r => r ! OperationFailed(id))
     reqs -= (id)
   }
 
+  def checkRequest(id: Long) {
+    pendingAcks.get(id) match {
+      case Some(acks) if (acks.isEmpty && !pendingPersist.contains(id)) => {
+        reqs.get(id).get ! OperationAck(id)
+        reqs -= (id)
+        pendingAcks -= (id)
+      }
+      case _ =>
+    }
+  }
+
   def replicas(rs: Set[ActorRef]) {
-    replicators = rs.-(self).map(r => context.actorOf(Replicator.props(r)))
+    val current = secondaries.keys.toSet
+    val added = (rs-self) -- current
+    val removed = current -- (rs-self)
+
+    added.foreach { r =>
+      val replicator = context.actorOf(Replicator.props(r), s"replicator-${r.path.name}")
+      secondaries += ((r, replicator))
+      kv.foreach { case (key, value) => {
+    	  replicator ! Replicate(key, Some(value), 0)
+      }}
+    }
+
+    pendingAcks.foreach {
+      case (id, acks) => {
+        pendingAcks += ((id, acks -- removed.map { replica => secondaries(replica) }))
+        checkRequest(id)
+      }
+    }
+
+    removed.foreach { r =>
+      context.stop(secondaries(r))
+      secondaries -= r
+    }
   }
 
   // Replica behaviour
