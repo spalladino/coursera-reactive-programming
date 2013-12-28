@@ -29,11 +29,10 @@ class ReplicateAction(replica: ActorRef, id: Long, operation: Snapshot) extends 
     case msg @ SnapshotAck(_,_) => {
       cancellable.cancel()
       context.parent forward msg
+      context.stop(self)
     }
     case ReceiveTimeout => {
-    	cancellable.cancel()
     	context.parent ! ReplicateActionFailed(id, operation)
-    	context.stop(self)
     }
   }
 
