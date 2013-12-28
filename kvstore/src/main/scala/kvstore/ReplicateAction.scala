@@ -14,6 +14,7 @@ import kvstore.Replicator.SnapshotAck
 object ReplicateAction {
   def props(replica: ActorRef, id: Long, operation: Snapshot): Props = Props(new ReplicateAction(replica, id, operation))
   
+  case class ReplicateActionSuccess(id: Long, operation: Snapshot)
   case class ReplicateActionFailed(id: Long, operation: Snapshot)
 }
 
@@ -28,7 +29,7 @@ class ReplicateAction(replica: ActorRef, id: Long, operation: Snapshot) extends 
   def receive = {
     case msg @ SnapshotAck(_,_) => {
       cancellable.cancel()
-      context.parent forward msg
+      context.parent ! ReplicateActionSuccess(id, operation)
       context.stop(self)
     }
     case ReceiveTimeout => {

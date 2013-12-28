@@ -10,25 +10,41 @@ import akka.actor.Props
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
 import scala.concurrent.duration._
+import akka.event.LoggingReceive
+import akka.testkit.TestActor
 
 object Tools {
   class TestRefWrappingActor(val probe: TestProbe) extends Actor {
-    def receive = { case msg => probe.ref forward msg }
+    def receive = LoggingReceive { case msg => probe.ref forward msg }
+  }
+
+  object LoggingTestProbe {
+    def apply()(implicit system: ActorSystem): TestProbe = {
+      val probe = TestProbe()
+      probe.setAutoPilot(new TestActor.AutoPilot {
+        def run(sender: ActorRef, msg: Any) = {
+          val other = sender.path
+          system.log.debug(s"probe received $msg from $other")
+          this
+        }
+      })
+      probe
+    }
   }
 }
 
 /**
- * This is a utility to mix into your tests which provides convenient access 
- * to a given replica. It will keep track of requested updates and allow 
+ * This is a utility to mix into your tests which provides convenient access
+ * to a given replica. It will keep track of requested updates and allow
  * simple verification. See e.g. Step 1 for how it can be used.
  */
 trait Tools { this: TestKit with FunSuite with ShouldMatchers with ImplicitSender =>
-  
+
   import Arbiter._
   import Tools._
 
   def probeProps(probe: TestProbe): Props = Props(classOf[TestRefWrappingActor], probe)
-  
+
   class Session(val probe: TestProbe, val replica: ActorRef) {
     import Replica._
 
@@ -78,7 +94,6 @@ trait Tools { this: TestKit with FunSuite with ShouldMatchers with ImplicitSende
     def nothingHappens(duration: FiniteDuration): Unit = probe.expectNoMsg(duration)
   }
 
-  def session(replica: ActorRef)(implicit system: ActorSystem) = new Session(TestProbe(), replica)
-
+  def session(replica: ActorRef)(implicit system: ActorSystem) = new Session(LoggingTestProbe(), replica)
 
 }

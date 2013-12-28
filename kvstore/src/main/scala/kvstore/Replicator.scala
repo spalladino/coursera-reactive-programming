@@ -5,7 +5,8 @@ import akka.actor.Actor
 import akka.actor.ActorRef
 import scala.concurrent.duration._
 import akka.actor.Cancellable
-import kvstore.ReplicateAction.ReplicateActionFailed
+import kvstore.ReplicateAction._
+import akka.event.LoggingReceive
 
 object Replicator {
   case class Replicate(key: String, valueOption: Option[String], id: Long)
@@ -30,15 +31,17 @@ class Replicator(val replica: ActorRef) extends Actor {
     ret
   }
   
-  def receive: Receive = {
+  
+  
+  def receive: Receive = LoggingReceive {
     
   	case msg@Replicate(key, valueOption, id) => {
       val seq = nextSeq
       context.actorOf(ReplicateAction.props(replica, id, Snapshot(key, valueOption, seq)))
     }
   	
-    case SnapshotAck(key, seq) => {
-      context.parent ! Replicated(key, seq)
+    case ReplicateActionSuccess(id, Snapshot(key, _, seq)) => {
+      context.parent ! Replicated(key, id)
     }
     
     case ReplicateActionFailed(id, Snapshot(key, _, seq)) => {

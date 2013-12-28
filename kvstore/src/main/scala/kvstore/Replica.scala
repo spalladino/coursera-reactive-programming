@@ -12,6 +12,7 @@ import akka.actor.OneForOneStrategy
 import akka.actor.SupervisorStrategy
 import akka.util.Timeout
 import akka.actor.PoisonPill
+import akka.event.LoggingReceive
 
 object Replica {
   sealed trait Operation {
@@ -51,11 +52,11 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) { case _ => Restart }
 
-  val persistence = context.actorOf(persistenceProps)
+  val persistence = context.actorOf(persistenceProps, s"persistence-${self.path.name}")
 
   arbiter ! Join
 
-  def receive = {
+  def receive = LoggingReceive {
     case JoinedPrimary   => context.become(leader)
     case JoinedSecondary => context.become(replica())
   }
@@ -71,7 +72,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   // Leader behaviour
 
-  val leader: Receive = {
+  val leader: Receive = LoggingReceive {
     case Get(key, id)                       => get(key, id)
     case Insert(key, value, id)             => leaderInsert(key, value, id)
     case Remove(key, id)                    => leaderRemove(key, id)
@@ -161,7 +162,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   // Replica behaviour
 
-  def replica(expectedSeq: Long = 0): Receive = {
+  def replica(expectedSeq: Long = 0): Receive = LoggingReceive {
     case Get(key, id) => get(key, id)
     case Snapshot(key, value, seq) if seq == expectedSeq => storeSnapshot(key, value, seq)
     case Snapshot(key, value, seq) if seq < expectedSeq => sender ! SnapshotAck(key, seq)
